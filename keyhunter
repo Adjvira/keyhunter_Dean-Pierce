@@ -1,0 +1,146 @@
+#!/usr/bin/python
+
+import hashlib
+import binascii
+import sys
+import os
+from tkinter import *
+
+result_file = "result.txt"
+
+root = Tk()
+
+have_results = False
+
+# bytes to read at a time from file (10meg)
+readlength=10*1024*1024
+
+magic = '\x01\x30\x82\x01\x13\x02\x01\x01\x04\x20'
+magiclen = len(magic)
+
+##### start code from pywallet.py #############
+
+__b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+__b58base = len(__b58chars)
+
+def b58encode(v):
+    """ encode v, which is a string of bytes, to base58.
+    """
+
+    long_value = 0
+    for (i, c) in enumerate(v[::-1]):
+        long_value += (256**i) * c
+
+    result = ''
+    while long_value >= __b58base:
+        div, mod = divmod(long_value, __b58base)
+        result = __b58chars[mod] + result
+        long_value = div
+    result = __b58chars[long_value] + result
+
+    # Bitcoin does a little leading-zero-compression:
+    # leading 0-bytes in the input become leading-1s
+    nPad = 0
+    for c in v:
+        if c != '\0':
+            break
+        nPad += 1
+
+    return (__b58chars[0]*nPad) + result
+
+def Hash(data):
+    return hashlib.sha256(hashlib.sha256(data).digest()).digest()
+
+def EncodeBase58Check(secret):
+    hash = Hash(secret)
+    return b58encode(secret + hash[0:4])
+
+########## end code from pywallet.py ############
+
+def find_keys(filename):
+    keys = set()
+    with open(filename, "rb") as f:
+        # read through target file one block at a time
+        while True:
+            data = f.read(readlength)
+            if not data:
+                break
+
+            # look in this block for keys
+            pos = 0
+            while True:
+                # find the magic number
+                pos = data.find(magic.encode('utf-8'), pos)
+
+                if pos == -1:
+                    break
+                key_offset = pos + magiclen
+                key_data = "\x80".encode('utf-8') + data[key_offset:key_offset + 32]
+                keys.add(EncodeBase58Check(key_data))
+                pos += 1
+
+            # are we at the end of the file?
+            if len(data) == readlength:
+                # make sure we didn't miss any keys at the end of the block
+                f.seek(f.tell() - (32 + magiclen))
+    return keys
+
+def save_result(key, filename) :
+    global have_results
+    have_results = True
+    f = open(result_file, 'a')
+    f.write(key + " - " + filename + "\n")
+    f.close()
+
+path_input = Entry
+
+def click():
+    path = path_input.get()
+
+    dir_filenames = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk(path) for f in filenames]
+
+    for file in dir_filenames:
+        print("Ищу в файле " + file)
+        keys = find_keys(file)
+        for key in keys:
+            save_result(key, file)
+
+    global have_results
+    if not have_results:
+        f = open(result_file, 'w')
+        f.write("работа завершена, ничего не найдено. \n")
+        f.close()
+    root.destroy()
+
+def startWindow():
+    root.title("Поиск ключей")
+    root.geometry("450x150")
+    root.resizable(width=False, height=False)
+
+    frame_info2 = Frame(root)
+    frame_info2.place(relx=0.03, rely=0.4, relwidth=0.3, relheight=0.11)
+
+    title2 = Label(frame_info2, text="Путь до директории")
+    title2.pack()
+
+    frame_input_path = Frame(root)
+    frame_input_path.place(relx=0.3, rely=0.4, relwidth=0.4, relheight=0.11)
+
+    global path_input
+
+    path_input = Entry(frame_input_path)
+    path_input.pack()
+
+    button_frame = Frame(root)
+    button_frame.place(relx=0.8, rely=0.65, relwidth=0.20, relheight=0.17)
+    btn = Button(button_frame, text="Ок", command=click)
+    btn.pack()
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    try:
+        os.remove(result_file)
+    except:
+        ...
+    startWindow()

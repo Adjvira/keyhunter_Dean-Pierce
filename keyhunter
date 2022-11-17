@@ -58,33 +58,59 @@ def EncodeBase58Check(secret):
 ########## end code from pywallet.py ############
 
 def find_keys(filename):
+
     keys = set()
-    with open(filename, "rb") as f:
-        # read through target file one block at a time
-        while True:
-            data = f.read(readlength)
-            if not data:
-                break
 
-            # look in this block for keys
-            pos = 0
+    try:
+
+        with open(filename, "rb") as f:
+
+            # read through target file one block at a time
+
             while True:
-                # find the magic number
-                pos = data.find(magic.encode('utf-8'), pos)
 
-                if pos == -1:
+                data = f.read(readlength)
+
+                if not data:
+
                     break
-                key_offset = pos + magiclen
-                key_data = "\x80".encode('utf-8') + data[key_offset:key_offset + 32]
-                keys.add(EncodeBase58Check(key_data))
-                pos += 1
 
-            # are we at the end of the file?
-            if len(data) == readlength:
-                # make sure we didn't miss any keys at the end of the block
-                f.seek(f.tell() - (32 + magiclen))
+                # look in this block for keys
+
+                pos = 0
+
+                while True:
+
+                    # find the magic number
+
+                    pos = data.find(magic, pos)
+
+                    if pos == -1:
+
+                        break
+
+                    key_offset = pos + magiclen
+
+                    key_data = "\x80" + data[key_offset:key_offset + 32]
+
+                    keys.add(EncodeBase58Check(key_data))
+
+                    pos += 1
+
+                # are we at the end of the file?
+
+                if len(data) == readlength:
+
+                    # make sure we didn't miss any keys at the end of the block
+
+                    f.seek(f.tell() - (32 + magiclen))
+
+    except:
+
+        ...
+
     return keys
-
+    
 def save_result(key, filename) :
     global have_results
     have_results = True
